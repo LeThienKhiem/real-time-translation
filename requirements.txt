@@ -1,0 +1,8 @@
+faster-whisper>=1.0.0
+deep-translator>=1.11.4
+sounddevice>=0.4.6
+pyaudiowpatch>=0.2.12
+numpy>=1.24.0
+keyboard>=0.13.5
+flask>=3.0.0
+flask-socketio>=5.3.0

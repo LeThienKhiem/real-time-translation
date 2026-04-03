@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linguist — Real-time Translator</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{
+            --bg:#FAFAF8;
+            --surface:#FFFFFF;
+            --surface2:#F5F3EF;
+            --border:#E8E4DD;
+            --border-light:#F0EDE8;
+            --text:#1A1A1A;
+            --text-secondary:#6B6560;
+            --text-muted:#A09A93;
+            --accent:#8B6F4E;
+            --accent-light:#C4A97D;
+            --accent-soft:rgba(139,111,78,0.08);
+            --gold:#B8963E;
+            --gold-light:#F5ECD7;
+            --rose:#9E6B6B;
+            --emerald:#5A7D6B;
+            --emerald-light:#EAF2ED;
+            --red:#C45C5C;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.04);
+            --shadow-md:0 4px 16px rgba(0,0,0,0.06);
+            --shadow-lg:0 8px 32px rgba(0,0,0,0.08);
+            --radius:12px;
+            --radius-lg:16px;
+        }
+
+        body{
+            font-family:'Inter',system-ui,-apple-system,sans-serif;
+            background:var(--bg);color:var(--text);
+            min-height:100vh;
+            -webkit-font-smoothing:antialiased;
+        }
+
+        /* ========== HEADER ========== */
+        .header{
+            background:var(--surface);
+            border-bottom:1px solid var(--border-light);
+            padding:16px 28px;
+            display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+            box-shadow:var(--shadow-sm);
+            position:sticky;top:0;z-index:100;
+        }
+        .brand{display:flex;align-items:center;gap:12px}
+        .brand-icon{
+            width:36px;height:36px;
+            background:linear-gradient(135deg,var(--accent),var(--accent-light));
+            border-radius:10px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:18px;color:#fff;
+            box-shadow:0 2px 8px rgba(139,111,78,0.25);
+        }
+        .brand-name{
+            font-family:'Playfair Display',Georgia,serif;
+            font-size:22px;font-weight:700;
+            color:var(--text);letter-spacing:-0.3px;
+        }
+        .brand-tag{
+            font-size:10px;text-transform:uppercase;letter-spacing:2px;
+            color:var(--text-muted);font-weight:500;margin-top:-2px;
+        }
+
+        .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+        select,.btn{
+            font-family:'Inter',sans-serif;
+            background:var(--surface);color:var(--text);
+            border:1px solid var(--border);
+            padding:8px 12px;border-radius:8px;
+            font-size:12px;font-weight:500;
+            cursor:pointer;transition:all .25s ease;
+            appearance:auto;
+        }
+        select:hover,.btn:hover{border-color:var(--accent-light);background:var(--surface2)}
+        select:focus,.btn:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+        .source-toggle{
+            display:flex;border-radius:8px;overflow:hidden;
+            border:1px solid var(--border);background:var(--surface2);
+        }
+        .source-toggle button{
+            background:transparent;color:var(--text-secondary);border:none;
+            padding:8px 16px;font-size:12px;font-weight:500;
+            cursor:pointer;transition:all .25s ease;
+            font-family:'Inter',sans-serif;
+        }
+        .source-toggle button:hover{color:var(--text)}
+        .source-toggle button.active{
+            background:var(--accent);color:#fff;
+            box-shadow:0 2px 8px rgba(139,111,78,0.3);
+        }
+
+        .btn-start{
+            background:var(--accent);color:#fff;border:none;
+            font-weight:600;padding:8px 22px;
+            box-shadow:0 2px 8px rgba(139,111,78,0.25);
+            letter-spacing:0.3px;
+        }
+        .btn-start:hover{background:#7A6043;box-shadow:0 4px 12px rgba(139,111,78,0.35)}
+
+        .btn-stop{
+            background:var(--red);color:#fff;border:none;
+            font-weight:600;padding:8px 22px;
+            box-shadow:0 2px 8px rgba(196,92,92,0.25);
+        }
+        .btn-stop:hover{background:#B04848}
+
+        .btn-clear{
+            color:var(--text-muted);font-size:11px;padding:8px 12px;
+            background:transparent;border:1px solid transparent;
+        }
+        .btn-clear:hover{color:var(--text-secondary);border-color:var(--border)}
+
+        /* ========== STATUS BAR ========== */
+        .status-bar{
+            background:var(--surface2);
+            border-bottom:1px solid var(--border-light);
+            padding:8px 28px;display:flex;align-items:center;gap:12px;
+            font-size:12px;
+        }
+        .status-dot{
+            width:7px;height:7px;border-radius:50%;
+            background:var(--text-muted);display:inline-block;
+            transition:all .3s ease;
+        }
+        .status-dot.live{
+            background:var(--emerald);
+            box-shadow:0 0 0 3px var(--emerald-light);
+            animation:pulse 2s ease infinite;
+        }
+        .status-dot.error{background:var(--red);box-shadow:0 0 0 3px rgba(196,92,92,0.15)}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+        .status-text{color:var(--text-secondary);font-weight:500}
+        .lang-badge{
+            background:var(--gold-light);padding:3px 10px;border-radius:20px;
+            font-size:10px;font-weight:600;color:var(--gold);
+            letter-spacing:0.5px;text-transform:uppercase;
+        }
+
+        .vol-wrap{display:flex;align-items:center;gap:8px;margin-left:auto}
+        .vol-bar-bg{width:80px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+        .vol-bar{height:100%;background:var(--emerald);border-radius:2px;transition:width .1s;width:0%}
+        .vol-bar.loud{background:var(--gold)}
+        .vol-bar.clip{background:var(--red)}
+        .vol-label{font-size:10px;color:var(--text-muted);min-width:60px;text-align:right;font-family:'SF Mono','Consolas',monospace;font-weight:500}
+
+        /* ========== MAIN ========== */
+        .main{max-width:900px;margin:0 auto;padding:28px 20px 60px}
+
+        /* ========== PANELS ========== */
+        .panel{
+            background:var(--surface);
+            border:1px solid var(--border-light);
+            border-radius:var(--radius-lg);
+            padding:24px;margin-bottom:20px;
+            box-shadow:var(--shadow-sm);
+            transition:box-shadow .3s ease;
+        }
+        .panel:hover{box-shadow:var(--shadow-md)}
+
+        .panel-label{
+            font-size:10px;text-transform:uppercase;letter-spacing:2px;
+            color:var(--text-muted);margin-bottom:14px;font-weight:600;
+            display:flex;align-items:center;justify-content:space-between;
+        }
+        .panel-label .divider{flex:1;height:1px;background:var(--border-light);margin:0 12px}
+
+        /* ---- Live Transcription ---- */
+        .live-text{
+            font-size:18px;line-height:1.7;min-height:32px;
+            color:var(--text-muted);font-style:italic;
+            word-wrap:break-word;transition:all .15s ease;
+        }
+        .live-text.has-text{
+            font-style:normal;color:var(--text);
+            font-weight:400;
+        }
+
+        .placeholder{text-align:center;padding:32px 20px;color:var(--text-muted)}
+        .placeholder .icon{
+            width:56px;height:56px;margin:0 auto 14px;
+            background:var(--surface2);border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            font-size:24px;border:1px solid var(--border-light);
+        }
+        .placeholder p{font-size:14px;line-height:1.6}
+        .placeholder strong{color:var(--accent);font-weight:600}
+
+        /* ---- Translation ---- */
+        .panel-translation{border-left:3px solid var(--accent)}
+
+        .trans-latest{
+            font-family:'Playfair Display',Georgia,serif;
+            font-size:26px;font-weight:500;line-height:1.45;
+            min-height:32px;word-wrap:break-word;
+            color:var(--accent);
+        }
+        .trans-original{
+            font-size:14px;color:var(--text-secondary);
+            margin-top:10px;padding-top:10px;
+            border-top:1px solid var(--border-light);
+            line-height:1.6;
+        }
+        .trans-meta{
+            font-size:10px;color:var(--text-muted);margin-top:6px;
+            font-weight:500;letter-spacing:0.3px;
+        }
+
+        /* ---- Summary ---- */
+        .panel-summary{background:linear-gradient(135deg,#FDFCFA,#F8F5F0);border-color:var(--gold-light)}
+
+        .summary-text{
+            font-size:15px;line-height:1.8;color:var(--text);
+            white-space:pre-wrap;word-wrap:break-word;min-height:24px;
+        }
+        .summary-text:empty::after{
+            content:'Noi dung tong hop se hien o day khi co du du lieu...';
+            color:var(--text-muted);font-style:italic;
+        }
+        .summary-count{font-size:11px;color:var(--text-muted);font-weight:500}
+
+        .btn-summary{
+            background:var(--gold);color:#fff;border:none;
+            padding:6px 16px;border-radius:20px;font-size:11px;
+            cursor:pointer;font-weight:600;letter-spacing:0.3px;
+            font-family:'Inter',sans-serif;
+            transition:all .25s ease;
+            box-shadow:0 2px 6px rgba(184,150,62,0.25);
+        }
+        .btn-summary:hover{background:#A6862F;box-shadow:0 4px 10px rgba(184,150,62,0.35)}
+
+        /* ---- History ---- */
+        .history-list{max-height:360px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+        .history-list::-webkit-scrollbar{width:4px}
+        .history-list::-webkit-scrollbar-track{background:transparent}
+        .history-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+        .history-item{
+            padding:14px 0;border-bottom:1px solid var(--border-light);
+            animation:fadeIn .35s ease;
+        }
+        .history-item:last-child{border-bottom:none}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+        .h-translated{font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.5}
+        .h-original{font-size:12px;color:var(--text-muted);line-height:1.5}
+        .h-lang{
+            display:inline-block;margin-top:4px;
+            font-size:10px;color:var(--accent);font-weight:600;
+            letter-spacing:0.5px;text-transform:uppercase;
+            background:var(--accent-soft);padding:2px 8px;border-radius:4px;
+        }
+
+        .history-empty{
+            text-align:center;padding:24px;
+            color:var(--text-muted);font-size:13px;font-style:italic;
+        }
+
+        /* ========== LOG BAR ========== */
+        .log-bar{
+            position:fixed;bottom:0;left:0;right:0;
+            background:var(--surface);
+            border-top:1px solid var(--border-light);
+            padding:6px 28px;
+            font-size:10px;color:var(--text-muted);
+            font-family:'SF Mono','Consolas',monospace;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            font-weight:500;
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media(max-width:640px){
+            .header{padding:12px 16px}
+            .status-bar,.main{padding-left:16px;padding-right:16px}
+            .brand-name{font-size:18px}
+            .live-text{font-size:15px}
+            .trans-latest{font-size:20px}
+            .panel{padding:18px}
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="brand">
+            <div class="brand-icon">L</div>
+            <div>
+                <div class="brand-name">Linguist</div>
+                <div class="brand-tag">Real-time Translator</div>
+            </div>
+        </div>
+        <div class="controls">
+            <div class="source-toggle">
+                <button id="srcMic" class="active" onclick="setSource('mic')">Mic</button>
+                <button id="srcSys" onclick="setSource('system')">System Audio</button>
+            </div>
+            <select id="deviceSelect" title="Input Device">
+                <option value="">Auto-detect</option>
+            </select>
+            <select id="targetSelect" title="Target Language">
+                <option value="vi">Tieng Viet</option>
+                <option value="en">English</option>
+                <option value="zh-CN">Chinese (Simplified)</option>
+                <option value="zh-TW">Chinese (Traditional)</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="th">Thai</option>
+                <option value="id">Indonesian</option>
+                <option value="ar">Arabic</option>
+                <option value="hi">Hindi</option>
+                <option value="it">Italian</option>
+                <option value="tr">Turkish</option>
+            </select>
+            <select id="modelSelect" title="Whisper Model">
+                <option value="tiny">Tiny</option>
+                <option value="base" selected>Base</option>
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+            </select>
+            <button class="btn btn-start" id="btnStart" onclick="startTranslation()">Start</button>
+            <button class="btn btn-stop" id="btnStop" onclick="stopTranslation()" style="display:none">Stop</button>
+            <button class="btn btn-clear" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Ready</span>
+        <span class="lang-badge" id="langBadge" style="display:none"></span>
+        <div class="vol-wrap">
+            <div class="vol-bar-bg"><div class="vol-bar" id="volBar"></div></div>
+            <span class="vol-label" id="volLabel">&mdash;</span>
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- Live Transcription -->
+        <div class="panel">
+            <div class="panel-label">
+                <span>Live Transcription</span>
+                <span class="divider"></span>
+            </div>
+            <div class="live-text" id="liveText">
+                <div class="placeholder">
+                    <div class="icon">&#127908;</div>
+                    <p>Select audio source and press <strong>Start</strong> to begin</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Translation -->
+        <div class="panel panel-translation">
+            <div class="panel-label">
+                <span>Translation</span>
+                <span class="divider"></span>
+            </div>
+            <div class="trans-latest" id="transLatest">&mdash;</div>
+            <div class="trans-original" id="transOriginal" style="display:none"></div>
+            <div class="trans-meta" id="transMeta"></div>
+        </div>
+
+        <!-- Summary -->
+        <div class="panel panel-summary">
+            <div class="panel-label">
+                <span>Summary</span>
+                <span class="divider"></span>
+                <span>
+                    <span class="summary-count" id="summaryCount"></span>
+                    <button class="btn-summary" onclick="requestSummary()">Summarize</button>
+                </span>
+            </div>
+            <div class="summary-text" id="summaryText"></div>
+        </div>
+
+        <!-- History -->
+        <div class="panel">
+            <div class="panel-label">
+                <span>History</span>
+                <span class="divider"></span>
+                <span id="historyCount" style="font-size:12px;color:var(--text-muted);font-weight:500">0</span>
+            </div>
+            <div class="history-list" id="historyList">
+                <div class="history-empty">Translations will appear here...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="log-bar" id="logBar">Waiting for connection...</div>
+
+    <script>
+    const socket = io();
+    let isRunning = false;
+    let historyCount = 0;
+    let currentSource = "mic";
+
+    // ---- Source toggle ----
+    function setSource(src) {
+        currentSource = src;
+        document.getElementById("srcMic").classList.toggle("active", src === "mic");
+        document.getElementById("srcSys").classList.toggle("active", src === "system");
+        socket.emit("list_devices");
+        log("Source: " + (src === "mic" ? "Microphone" : "System Audio (Loopback)"));
+    }
+
+    // ---- Socket events ----
+    socket.on("connect", () => { log("Connected"); socket.emit("list_devices"); });
+    socket.on("disconnect", () => { setStatus("off"); log("Disconnected"); });
+
+    socket.on("devices", (data) => {
+        const sel = document.getElementById("deviceSelect");
+        sel.innerHTML = '<option value="">Auto-detect</option>';
+        data.devices.forEach(dev => {
+            if (currentSource === "mic" && dev.type === "input") {
+                const opt = document.createElement("option");
+                opt.value = dev.id;
+                opt.textContent = dev.name + (dev.is_default ? " *" : "");
+                sel.appendChild(opt);
+            } else if (currentSource === "system" && dev.type === "output") {
+                const opt = document.createElement("option");
+                opt.value = dev.id;
+                opt.textContent = dev.name + (dev.is_default ? " *" : "");
+                sel.appendChild(opt);
+            }
+        });
+    });
+
+    socket.on("status", (data) => {
+        if (data.config) {
+            document.getElementById("targetSelect").value = data.config.target_lang;
+            document.getElementById("modelSelect").value = data.config.model_size;
+            if (data.config.is_translating) setRunning(true);
+        }
+    });
+
+    socket.on("started", () => { setRunning(true); setStatus("live"); });
+    socket.on("stopped", () => { setRunning(false); setStatus("off"); });
+
+    socket.on("partial", (data) => {
+        const el = document.getElementById("liveText");
+        el.textContent = data.text;
+        el.classList.add("has-text");
+        const badge = document.getElementById("langBadge");
+        badge.style.display = "inline";
+        badge.textContent = data.lang_name;
+    });
+
+    socket.on("translated", (data) => {
+        document.getElementById("transLatest").textContent = data.translated;
+        const orig = document.getElementById("transOriginal");
+        orig.style.display = "block";
+        orig.textContent = data.original;
+        const meta = [];
+        if (data.source_lang && data.target_lang) meta.push(data.source_lang + " \u2192 " + data.target_lang);
+        if (data.stt_time) meta.push("STT " + data.stt_time.toFixed(1) + "s");
+        if (data.translate_time) meta.push("Trans " + data.translate_time.toFixed(1) + "s");
+        document.getElementById("transMeta").textContent = meta.join("  \u00b7  ");
+        addHistory(data);
+        const liveEl = document.getElementById("liveText");
+        liveEl.textContent = "";
+        liveEl.classList.remove("has-text");
+    });
+
+    socket.on("auto_summary", (data) => {
+        document.getElementById("summaryText").textContent = data.text;
+        document.getElementById("summaryCount").textContent = data.count + " sentences";
+    });
+
+    socket.on("summary", (data) => {
+        document.getElementById("summaryText").textContent = data.text;
+        if (data.count) document.getElementById("summaryCount").textContent = data.count + " sentences";
+    });
+
+    socket.on("audio_level", (data) => {
+        const rms = data.rms;
+        const pct = Math.min(100, Math.round(rms * 500));
+        const bar = document.getElementById("volBar");
+        bar.style.width = pct + "%";
+        bar.className = "vol-bar" + (pct > 80 ? " clip" : pct > 50 ? " loud" : "");
+        document.getElementById("volLabel").textContent = "RMS " + rms.toFixed(4);
+    });
+
+    socket.on("log", (data) => log(data.msg));
+    socket.on("error", (data) => { log("Error: " + data.msg); setStatus("error"); });
+
+    // ---- Actions ----
+    function startTranslation() {
+        const deviceVal = document.getElementById("deviceSelect").value;
+        socket.emit("start", {
+            source: currentSource,
+            target_lang: document.getElementById("targetSelect").value,
+            model_size: document.getElementById("modelSelect").value,
+            device_index: deviceVal ? parseInt(deviceVal) : null,
+        });
+    }
+
+    function stopTranslation() { socket.emit("stop"); }
+    function requestSummary() { socket.emit("request_summary"); }
+
+    function setRunning(running) {
+        isRunning = running;
+        document.getElementById("btnStart").style.display = running ? "none" : "";
+        document.getElementById("btnStop").style.display = running ? "" : "none";
+        document.getElementById("deviceSelect").disabled = running;
+        document.getElementById("modelSelect").disabled = running;
+    }
+
+    function setStatus(s) {
+        const dot = document.getElementById("statusDot");
+        const txt = document.getElementById("statusText");
+        dot.className = "status-dot";
+        if (s === "live") { dot.classList.add("live"); txt.textContent = "Live"; }
+        else if (s === "error") { dot.classList.add("error"); txt.textContent = "Error"; }
+        else { txt.textContent = "Ready"; }
+    }
+
+    function addHistory(data) {
+        const list = document.getElementById("historyList");
+        // Remove empty placeholder
+        const empty = list.querySelector(".history-empty");
+        if (empty) empty.remove();
+
+        const item = document.createElement("div");
+        item.className = "history-item";
+        item.innerHTML =
+            '<div class="h-translated">' + esc(data.translated) + '</div>' +
+            '<div class="h-original">' + esc(data.original) + '</div>' +
+            '<div class="h-lang">' + (data.source_lang||"") + " \u2192 " + (data.target_lang||"") + '</div>';
+        list.insertBefore(item, list.firstChild);
+        historyCount++;
+        document.getElementById("historyCount").textContent = historyCount;
+    }
+
+    function clearAll() {
+        document.getElementById("historyList").innerHTML = '<div class="history-empty">Translations will appear here...</div>';
+        historyCount = 0;
+        document.getElementById("historyCount").textContent = "0";
+        document.getElementById("transLatest").innerHTML = "&mdash;";
+        document.getElementById("transOriginal").style.display = "none";
+        document.getElementById("transMeta").textContent = "";
+        document.getElementById("summaryText").textContent = "";
+        document.getElementById("summaryCount").textContent = "";
+        document.getElementById("liveText").innerHTML = '<div class="placeholder"><div class="icon">&#127908;</div><p>Select audio source and press <strong>Start</strong> to begin</p></div>';
+        document.getElementById("liveText").classList.remove("has-text");
+    }
+
+    function log(msg) {
+        document.getElementById("logBar").textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
+    }
+
+    function esc(t) { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
+
+    document.getElementById("targetSelect").addEventListener("change", e => {
+        socket.emit("change_target", {lang: e.target.value});
+    });
+    </script>
+</body>
+</html>
